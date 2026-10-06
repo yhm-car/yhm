@@ -1,0 +1,7 @@
+{
+  "name": "yhm",
+  "version": "1.0.0",
+  "private": true,
+  "description": "yhm 逻辑关系图：离线逻辑表达式图形编辑器，重构自 kuangdash.gitlab.io/logicsim",
+  "scripts": { "test": "node --test tests/core.test.cjs" }
+}

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>yhm · 逻辑关系图</title>
+  <meta name="description" content="yhm 逻辑关系图：输入逆波兰逻辑表达式，完全离线生成逻辑关系图，可编辑节点名称与备注，并导出 / 载入 JSON 模型。">
+  <meta name="theme-color" content="#0f3f3b" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b1a1d" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f766e'/%3E%3Cpath d='M8 11h6a4 4 0 0 1 0 8H8m16-8h-4m4 8h-4M8 21h6' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="lib/joint.css">
+  <link rel="stylesheet" href="style.css">
+  <script defer src="lib/jquery.min.js"></script>
+  <script defer src="lib/lodash.min.js"></script>
+  <script defer src="lib/backbone.js"></script>
+  <script defer src="lib/graphlib.min.js"></script>
+  <script defer src="lib/dagre.min.js"></script>
+  <script defer src="lib/joint.js"></script>
+  <script defer src="src/core.js"></script>
+  <script defer src="src/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#viewport">跳到画布</a>
+
+  <header class="app-bar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <path d="M5 8h4.5a3.5 3.5 0 0 1 0 7H5"/><path d="M5 15h4.5"/><path d="M19 8h-3.2M19 15h-3.2"/><path d="M8 5v14"/>
+        </svg>
+      </span>
+      <span class="brand-name">yhm</span>
+      <span class="brand-sub">逻辑关系图 · 本地版</span>
+    </div>
+    <div class="actions">
+      <button id="import" class="ghost">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="M8 8l4-4 4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        载入文件
+      </button>
+      <button id="download" class="ghost">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12"/><path d="M8 12l4 4 4-4"/><path d="M4 18v1a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1"/></svg>
+        保存文件
+      </button>
+      <input id="file" type="file" accept=".json,.txt,application/json,text/plain" hidden>
+    </div>
+  </header>
+
+  <main>
+    <section class="editor" aria-label="表达式与模型">
+      <div class="panel expression-panel">
+        <div class="panel-head">
+          <label for="expression">逆波兰表达式</label>
+          <span class="hint">变量与运算符之间用空格分隔</span>
+        </div>
+        <textarea id="expression" spellcheck="false" rows="2" placeholder="例如：a b . fe >">a b . fe ></textarea>
+        <div class="panel-foot">
+          <div class="actions">
+            <button id="generate" class="primary">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4z"/><path d="M18 16.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>
+              生成逻辑图
+            </button>
+            <button id="parse" class="ghost">仅解析</button>
+          </div>
+          <p class="kbd-hint"><kbd>Ctrl</kbd> / <kbd>⌘</kbd> + <kbd>Enter</kbd> 快速生成</p>
+        </div>
+        <ul class="operators">
+          <li><code>a b .</code><span>与 ∧</span></li>
+          <li><code>a b ,</code><span>或 ∨</span></li>
+          <li><code>a &lt;</code><span>非 ¬</span></li>
+          <li><code>a b &gt;</code><span>推出 →</span></li>
+          <li><code>a b =</code><span>等价 ↔</span></li>
+        </ul>
+      </div>
+
+      <details class="panel model-panel" open>
+        <summary>查看 / 编辑 JSON 模型</summary>
+        <label class="sr-only" for="model">JSON 模型</label>
+        <textarea id="model" spellcheck="false">{"nodeArray":[],"linkArray":[]}</textarea>
+        <div class="actions">
+          <button id="load" class="ghost">文本转图</button>
+          <button id="serialize" class="ghost">图转文本</button>
+        </div>
+      </details>
+    </section>
+
+    <section class="workspace">
+      <div class="canvas-panel">
+        <div class="canvas-toolbar">
+          <span id="counts" class="chip">0 个节点 · 0 条连线</span>
+          <div class="actions">
+            <div class="zoom-group" role="group" aria-label="缩放">
+              <button id="zoom-out" aria-label="缩小" title="缩小">−</button>
+              <output id="zoom">100%</output>
+              <button id="zoom-in" aria-label="放大" title="放大">+</button>
+            </div>
+            <button id="fit" class="ghost">适应画布</button>
+            <button id="layout" class="ghost">重新布局</button>
+          </div>
+        </div>
+        <div id="viewport" tabindex="0" aria-label="逻辑图画布：可拖动节点，拖动空白处平移，滚轮缩放">
+          <div id="paper"></div>
+          <div id="empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="6" height="16" rx="2"/><rect x="15" y="8" width="6" height="8" rx="2"/><path d="M9 12h6"/></svg>
+            <p>输入表达式，点击「生成逻辑图」</p>
+            <small>拖动节点调整位置 · 拖动空白处平移 · 滚轮缩放</small>
+          </div>
+        </div>
+      </div>
+
+      <aside>
+        <section class="card">
+          <h2>节点属性</h2>
+          <p id="selection" class="muted">点击图中的节点查看和编辑</p>
+          <fieldset id="inspector" disabled>
+            <label for="node-name">名称</label>
+            <input id="node-name" maxlength="2000" placeholder="显示在节点下方">
+            <label for="node-memo">备注</label>
+            <textarea id="node-memo" maxlength="2000" placeholder="随模型一起保存"></textarea>
+            <div class="actions">
+              <button id="update" class="primary sm">保存修改</button>
+              <button id="delete" class="danger sm">删除节点</button>
+            </div>
+          </fieldset>
+        </section>
+
+        <section class="card">
+          <h2>总览</h2>
+          <div id="minimap" aria-label="逻辑图总览"><div id="mini-paper"></div></div>
+        </section>
+
+        <details open class="card help">
+          <summary>输入说明</summary>
+          <p>变量与运算符之间用空格分隔；<code>0</code>、<code>1</code> 表示假、真。</p>
+          <p><code>a b . fe &gt;</code> 表示 (a ∧ b) → fe。SEL 节点根据 SI 输入，在 0、1 两条分支之间选择。恒真、恒假及重复分支会自动简化。</p>
+          <p class="muted">支持中文变量名；变量名不能包含 <code>. , &lt; &gt; =</code>。</p>
+        </details>
+      </aside>
+    </section>
+  </main>
+
+  <footer id="status" role="status" aria-live="polite" data-error="false">已就绪。所有计算均在本地完成。</footer>
+</body>
+</html>
